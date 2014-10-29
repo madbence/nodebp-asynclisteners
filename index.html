@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>nodebp - asynclisteners</title>
+    <style>
+@import url(http://fonts.googleapis.com/css?family=Roboto+Slab:300);
+@import url(http://fonts.googleapis.com/css?family=IM+Fell+English);
+
+* {
+  margin: 0; padding 0;
+}
+
+body {
+  font-family: 'Roboto Slab', serif;
+  font-size: 26pt;
+  color: #222;
+}
+
+h1, h2, h3 {
+  font-family: 'IM Fell English', serif;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+h1 {
+  font-size: 2em;
+}
+
+.step {
+  width: 1200px;
+  position: relative;
+  height: 700px;
+}
+
+#me {
+  width: 100%;
+  position: relative;
+  text-align: center;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.step pre {
+  margin: 10px 30px;
+  font-size: 24pt;
+}
+
+.step pre strong {
+  color: #f00;
+  text-shadow: 0 0 20px rgba(0, 0, 0, 0.7);
+}
+
+.step .col {
+  width: 600px;
+  float: left;
+}
+
+.step ul li {
+  margin-bottom: 20px;
+}
+
+.step img {
+  width: 100%;
+}
+
+.step .center {
+  text-align: center;
+}
+
+#end {
+  display: none;
+}
+
+.active #end {
+  display: block;
+  height: 500px;
+  width: 800px;
+  margin: 0 auto;
+}
+    </style>
+  </head>
+  <body>
+    <div id="impress">
+      <div class="step" data-x="0" data-y="0">
+        <h1>AsyncListener API</h1>
+        <div id="me">@madbence</div>
+      </div>
+      <div class="step" data-x="0" data-y="0" data-scale="0.1">
+        <h1>Sorry</h2>
+        <h2>This topic is hardcore!</h2>
+        <p class="center">Try to keep up!</p>
+      </div>
+      <div class="step" data-x="1400" data-y="0">
+        <h1>Motivation</h1>
+        <h2>Losing call site</h2>
+        <div class="cols">
+          <div class="col">
+            <pre>function a() { b(); }
+function b() { c(); }
+function c() { d(); }
+function d() { throw new Error(); }
+a();</pre>
+            <p>Stack trace:</p>
+            <pre>Error
+  at d (...)
+  at c (...)
+  at b (...)
+  at a (...)</pre>
+          </div>
+          <div class="col">
+            <pre>function a() { b(); }
+function b() { c(); }
+function c() { <strong>setTimeout(</strong>d, 1000<strong>)</strong>; }
+function d() { throw new Error(); }
+a();</pre>
+            <p>Stack trace:</p>
+            <pre>Error
+  at d (...)</pre>
+          </div>
+        </div>
+      </div>
+      <div class="step" data-x="1400" data-y="800">
+        <h1>Motivation</h1>
+        <h2>Losing context</h2>
+        <pre>function remove(id, cb) {
+  logger.log('Removing %d', id, <strong>?context</strong>);
+  query(..., cb);
+}</pre>
+        <ul>
+          <li>Why was this called?</li>
+          <li>What was the failed query?</li>
+          <li>Who executed that query?</li>
+        </ul>
+      </div>
+      <div class="step" data-x="2800" data-y="0">
+        <h1>Ugly solution</h1>
+        <h2>Wrap every callback!</h2>
+        <pre>
+// instead of
+query('select * from users', cb);
+
+// wrap the callback!
+query('select * from users', <strong>wrap(</strong>cb<strong>)</strong>);
+
+function wrap(cb) {
+  var state = <strong>magically_save_the_context();</strong>
+  return function() {
+    <strong>magically_restore_the_context(state);</strong>
+    return cb.apply(this, arguments);
+  }
+}</pre>
+      </div>
+      <div class="step" data-x="4200" data-y="0">
+        <h1>Official&trade; solution</h1>
+        <h2>AsyncListener API</h2>
+        <ul>
+          <li>Available in node v0.11</li>
+          <li>Polyfill for v0.10 (monkeypatching ☹)</li>
+          <li>Experimental</li>
+          <li><strike>Huge</strike>Humongous performance impact ☹☹☹</li>
+          <li>It's not magic!</li>
+          <li>Domains</li>
+        </ul>
+      </div>
+      <div class="step" data-x="4200" data-y="800">
+        <h1>AsyncListener API</h1>
+        <pre>var tracing = require('tracing');
+tracing.addAsyncListener({
+  create: onCreate,
+  before: onBefore,
+  after: onAfter,
+  error: onError,
+})</pre>
+        <img src="al.png" />
+      </div>
+      <div class="step" data-x="5600" data-y="0">
+        <h1>Long stack traces</h1>
+        <h2>require('stackup')</h2>
+        <pre>require('stackup');
+
+function a() { b(); }
+function b() { c(); }
+function c() { setTimeout(d, 1000); }
+function d() { throw new Error(); }
+
+a();</pre>
+        <p>Stack trace:</p>
+        <pre>Error
+  at d (...)
+  ---- async ----
+  at c (...)
+  at b (...)
+  at a (...)</pre>
+      </div>
+      <div class="step" data-x="5600" data-y="800">
+        <h1>Continuation Local Storage</h1>
+        <pre>var create = require('continuation-local-storage').createNamespace;
+var other = require('./other-file.js');
+
+var ns = create('foo');
+
+ns.run(function () {
+  ns.set('bar', 1377);
+  setTimeout(other, 1000);
+});
+
+// other-file.js
+var lookup = require('continuation-local-storage').getNamespace;
+module.exports = function() {
+  var ns = lookup('foo');
+  console.log(ns.get('bar')); // 1337
+};</pre>
+      </div>
+      <div class="step" data-x="5600" data-y="1600">
+        <h1>Profiling</h1>
+        <h2>require('newrelic')</h1>
+        <ul>
+          <li>Instruments your app</li>
+          <li>Shows slow operations</li>
+          <li>Track anything</li>
+        </ul>
+      </div>
+      <div class="step" data-x="5600" data-y="1600" data-scale="50">
+        <h1>That's all, folks!</h1>
+        <img src="end.jpg" id="end"/>
+      </div>
+    </div>
+    <script src="impress.js"></script>
+    <script>impress().init();</script>
+  </body>
+</html>
